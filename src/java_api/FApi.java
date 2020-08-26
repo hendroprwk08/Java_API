@@ -1,8 +1,19 @@
 package java_api;
 
+import java.awt.Color;
+import java.awt.Image;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.imageio.ImageIO;
+import javax.swing.BorderFactory;
+import javax.swing.ImageIcon;
+import javax.swing.border.Border;
 import javax.swing.table.DefaultTableModel;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
@@ -18,6 +29,8 @@ public class FApi extends javax.swing.JFrame {
 
     DefaultTableModel model = new DefaultTableModel(); 
     int _posisi = 0; //untuk deteksi posisi baris tabel
+    String progress = "";
+    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     
     public FApi() {
         initComponents();
@@ -25,47 +38,61 @@ public class FApi extends javax.swing.JFrame {
         //set kolom
         Object[] columns = {"ID", "Meal", "Thumb link"};
         model.setColumnIdentifiers(columns);        
-        jTable.setModel(model);  
+        jTable.setModel(model);
         
-        load();
+        //setborder untk jlabel
+        Border border = BorderFactory.createLineBorder(Color.BLACK);
+        jLabel1.setBorder(border);
+        
+        lb_progress.setVisible(false);//set
     }
 
     void load(){
-        CloseableHttpClient httpclient = HttpClients.createDefault();
-        HttpGet httpget = new HttpGet("https://www.themealdb.com/api/json/v1/1/filter.php?c=Dessert");
-        CloseableHttpResponse response;
-        try {
-            response = httpclient.execute(httpget);
-            System.out.print("Response: "+ response);
-            
-            // Getting the status code.
-            int statusCode = response.getCode();
+        String url = "https://www.themealdb.com/api/json/v1/1/filter.php?c=Dessert";
+        progress = LocalDateTime.now().format(formatter) +"\nAccessing "+ url +"\n\n";
+        ta_progress.setText(ta_progress.getText() + progress);
+                    
+        lb_progress.setVisible(true);
+        Thread thread = new Thread(){
+            public void run(){
+                CloseableHttpClient httpclient = HttpClients.createDefault();
+                HttpGet httpget = new HttpGet(url);
+                CloseableHttpResponse response;
+                try {
+                    response = httpclient.execute(httpget);
+                    String responseBody = EntityUtils.toString(response.getEntity());
 
-            // Getting the response body.
-            String responseBody = EntityUtils.toString(response.getEntity());
+                    progress = LocalDateTime.now().format(formatter)
+                            +"\nResponse: "+ response 
+                            + "   Code: "+ response.getCode()
+                            + "\nResponse body: " + responseBody +"\n\n";
+                    ta_progress.setText(ta_progress.getText() + progress);
+                    
+                    //scroll paling bawah
+                    ta_progress.setCaretPosition(ta_progress.getText().length());
+                    
+                    JSONObject obj = new JSONObject(responseBody);
+                    JSONArray arr = obj.getJSONArray("meals");
 
-            System.out.println("Code: "+ statusCode);
-            System.out.println("Response body: " + responseBody);
-            
-            JSONObject obj = new JSONObject(responseBody);
-            JSONArray arr = obj.getJSONArray("meals");
-        
-            Object[] row = new Object[3];
-            String id, meal, thumb;
-            for (int i = 0; i < arr.length(); i++)
-            {
-                row[0] = arr.getJSONObject(i).getString("idMeal");
-                row[1] = arr.getJSONObject(i).getString("strMeal");
-                row[2] = arr.getJSONObject(i).getString("strMealThumb");
-                
-                //masukkan kedalam model table
-                model.addRow(row);
+                    Object[] row = new Object[3];
+                    String id, meal, thumb;
+                    for (int i = 0; i < arr.length(); i++)
+                    {
+                        row[0] = arr.getJSONObject(i).getString("idMeal");
+                        row[1] = arr.getJSONObject(i).getString("strMeal");
+                        row[2] = new ImageIcon(arr.getJSONObject(i).getString("strMealThumb"));
+
+                        //masukkan kedalam model table
+                        model.addRow(row);
+                    }
+                } catch (IOException | ParseException | JSONException ex) {
+                    Logger.getLogger(FApi.class.getName()).log(Level.SEVERE, null, ex);
+                } finally {
+                    lb_progress.setVisible(false);
+                }
             }
-        } catch (IOException | ParseException | JSONException ex) {
-            Logger.getLogger(FApi.class.getName()).log(Level.SEVERE, null, ex);
-        } finally {
-            lb_loader.setVisible(false);
-        }
+        };
+        thread.start();
     }
     
     /**
@@ -82,7 +109,12 @@ public class FApi extends javax.swing.JFrame {
         tf_meal = new javax.swing.JTextField();
         jScrollPane2 = new javax.swing.JScrollPane();
         ta_desc = new javax.swing.JTextArea();
-        lb_loader = new javax.swing.JLabel();
+        bt_load = new javax.swing.JButton();
+        jScrollPane3 = new javax.swing.JScrollPane();
+        ta_progress = new javax.swing.JTextArea();
+        bt_load1 = new javax.swing.JButton();
+        jLabel1 = new javax.swing.JLabel();
+        lb_progress = new javax.swing.JLabel();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -97,6 +129,11 @@ public class FApi extends javax.swing.JFrame {
                 "Title 1", "Title 2", "Title 3", "Title 4"
             }
         ));
+        jTable.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                jTableMouseClicked(evt);
+            }
+        });
         jScrollPane1.setViewportView(jTable);
 
         tf_meal.addActionListener(new java.awt.event.ActionListener() {
@@ -107,9 +144,32 @@ public class FApi extends javax.swing.JFrame {
 
         ta_desc.setColumns(20);
         ta_desc.setRows(5);
+        ta_desc.setWrapStyleWord(true);
         jScrollPane2.setViewportView(ta_desc);
 
-        lb_loader.setText("Mohon tunggu...");
+        bt_load.setText("Load");
+        bt_load.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                bt_loadActionPerformed(evt);
+            }
+        });
+
+        ta_progress.setColumns(20);
+        ta_progress.setFont(new java.awt.Font("Monospaced", 0, 12)); // NOI18N
+        ta_progress.setRows(5);
+        ta_progress.setWrapStyleWord(true);
+        jScrollPane3.setViewportView(ta_progress);
+
+        bt_load1.setText("Load Sample Image");
+        bt_load1.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                bt_load1ActionPerformed(evt);
+            }
+        });
+
+        jLabel1.setMaximumSize(new java.awt.Dimension(300, 200));
+
+        lb_progress.setText("Mohon tunggu...");
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
@@ -119,37 +179,146 @@ public class FApi extends javax.swing.JFrame {
                 .addContainerGap()
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(layout.createSequentialGroup()
-                        .addComponent(lb_loader)
-                        .addGap(0, 0, Short.MAX_VALUE))
-                    .addGroup(layout.createSequentialGroup()
-                        .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 360, Short.MAX_VALUE)
+                        .addComponent(bt_load)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(bt_load1)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addComponent(lb_progress)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                        .addComponent(tf_meal, javax.swing.GroupLayout.PREFERRED_SIZE, 227, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGroup(layout.createSequentialGroup()
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jScrollPane2, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 227, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(tf_meal, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 227, javax.swing.GroupLayout.PREFERRED_SIZE))))
+                            .addComponent(jScrollPane3, javax.swing.GroupLayout.Alignment.TRAILING)
+                            .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 617, Short.MAX_VALUE))
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                            .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 227, Short.MAX_VALUE)
+                            .addComponent(jLabel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
                 .addContainerGap())
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addContainerGap()
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                .addGap(11, 11, 11)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(tf_meal, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(bt_load)
+                    .addComponent(bt_load1)
+                    .addComponent(lb_progress))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING, false)
                     .addGroup(layout.createSequentialGroup()
-                        .addComponent(tf_meal, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 200, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 225, javax.swing.GroupLayout.PREFERRED_SIZE))
-                    .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 0, Short.MAX_VALUE))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(lb_loader)
-                .addContainerGap())
+                        .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGroup(javax.swing.GroupLayout.Alignment.LEADING, layout.createSequentialGroup()
+                        .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 148, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(jScrollPane3)))
+                .addContainerGap(17, Short.MAX_VALUE))
         );
 
         pack();
+        setLocationRelativeTo(null);
     }// </editor-fold>//GEN-END:initComponents
 
     private void tf_mealActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_tf_mealActionPerformed
         // TODO add your handling code here:
     }//GEN-LAST:event_tf_mealActionPerformed
+
+    private void bt_loadActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_bt_loadActionPerformed
+        load();
+    }//GEN-LAST:event_bt_loadActionPerformed
+
+    private void jTableMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_jTableMouseClicked
+        _posisi = jTable.getSelectedRow();
+        String id = model.getValueAt(_posisi, 0).toString();
+        String url = "https://www.themealdb.com/api/json/v1/1/lookup.php?i="+ id;
+        
+        progress = LocalDateTime.now().format(formatter) 
+                +"\nAccessing "+ url +"\n\n";
+        ta_progress.setText(ta_progress.getText() + progress);
+        
+        tf_meal.setText("");
+        ta_desc.setText("");
+        jLabel1.setIcon(null);
+        
+        lb_progress.setVisible(true);
+        Thread thread = new Thread(){
+            public void run(){
+                CloseableHttpClient httpclient = HttpClients.createDefault();
+                HttpGet httpget = new HttpGet(url);
+                CloseableHttpResponse response;
+                try {
+                    response = httpclient.execute(httpget);
+                    int statusCode = response.getCode(); // Getting the status code.
+                    String responseBody = EntityUtils.toString(response.getEntity()); // Getting the response body.
+
+                    progress = LocalDateTime.now().format(formatter) 
+                            +"\nResponse: "+ response 
+                            + "   Code: "+ statusCode
+                            + "\nResponse body: " + responseBody +"\n\n";
+                    ta_progress.setText(ta_progress.getText() + progress);
+                    
+                    //scroll paling bawah
+                    ta_progress.setCaretPosition(ta_progress.getText().length());
+                    
+                    JSONObject obj = new JSONObject(responseBody);
+                    JSONArray arr = obj.getJSONArray("meals");
+
+                    tf_meal.setText(arr.getJSONObject(0).getString("strMeal"));
+                    ta_desc.setText(arr.getJSONObject(0).getString("strInstructions"));
+                    
+                    //tampilkan gambar, gunakan bufferesimage
+                    String gambar = arr.getJSONObject(0).getString("strMealThumb");
+                    
+                    try {
+                        BufferedImage imgURL = ImageIO.read(new URL(gambar));
+                        
+                        ImageIcon imageIcon = new ImageIcon(
+                                new ImageIcon(imgURL)
+                                        .getImage()
+                                        .getScaledInstance(227, 200, Image.SCALE_SMOOTH));
+                        
+                        jLabel1.setIcon(imageIcon);
+                    } catch (MalformedURLException ex) {
+                        Logger.getLogger(FApi.class.getName()).log(Level.SEVERE, null, ex);
+                    } catch (IOException ex) {
+                        Logger.getLogger(FApi.class.getName()).log(Level.SEVERE, null, ex);
+                    }
+                } catch (IOException | ParseException | JSONException ex) {
+                    Logger.getLogger(FApi.class.getName()).log(Level.SEVERE, null, ex);
+                } finally {
+                    lb_progress.setVisible(false);
+                }
+            }
+        };
+        thread.start();
+    }//GEN-LAST:event_jTableMouseClicked
+    
+    private void bt_load1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_bt_load1ActionPerformed
+        progress = LocalDateTime.now().format(formatter)
+                +"\nPrepare for image buffering...\n\n";
+        ta_progress.setText(progress + ta_progress.getText());
+                    
+        lb_progress.setVisible(true);
+        Thread thread = new Thread(){
+            public void run(){
+                try {
+                    BufferedImage imgURL = ImageIO.read(new URL("https://www.themealdb.com/images/media/meals/wvpsxx1468256321.jpg"));
+                    ImageIcon imageIcon = new ImageIcon(new ImageIcon(imgURL).getImage().getScaledInstance(227, 200, Image.SCALE_SMOOTH));
+                    jLabel1.setIcon(imageIcon);
+                } catch (MalformedURLException ex) {
+                    Logger.getLogger(FApi.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (IOException ex) {
+                    Logger.getLogger(FApi.class.getName()).log(Level.SEVERE, null, ex);
+                } finally {
+                    lb_progress.setVisible(false);
+                }
+            }
+        };
+        thread.start();
+    }//GEN-LAST:event_bt_load1ActionPerformed
 
     /**
      * @param args the command line arguments
@@ -187,11 +356,16 @@ public class FApi extends javax.swing.JFrame {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JButton bt_load;
+    private javax.swing.JButton bt_load1;
+    private javax.swing.JLabel jLabel1;
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JScrollPane jScrollPane2;
+    private javax.swing.JScrollPane jScrollPane3;
     private javax.swing.JTable jTable;
-    private javax.swing.JLabel lb_loader;
+    private javax.swing.JLabel lb_progress;
     private javax.swing.JTextArea ta_desc;
+    private javax.swing.JTextArea ta_progress;
     private javax.swing.JTextField tf_meal;
     // End of variables declaration//GEN-END:variables
 }
